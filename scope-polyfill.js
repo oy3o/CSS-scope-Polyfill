@@ -13,7 +13,7 @@
     // 1. Feature Detection
     // If the browser natively supports it, we yield immediately.
     try {
-        if (CSS.supports('selector(@scope)')) {
+        if (typeof CSSScopeRule !== "undefined") {
             console.log(`${TAG} Native support detected. Hibernating.`);
             return;
         }
@@ -112,12 +112,17 @@
 
             // 4. Transform Logic
             if (headerRaw.startsWith('@')) {
-                // Case A: At-Rules (recursive pass)
-                // e.g., @media (min-width: 500px) { ... }
-                const processedBody = processBlock(blockBody, rootSelector);
-                result += `${headerRaw} {\n${processedBody}\n}\n`;
+                const isDefinitionRule = /^@(keyframes|font-face)/i.test(headerRaw);
+                if (isDefinitionRule) {
+                    // Case A: Definition Rules (@keyframes, @font-face)
+                    result += `${headerRaw} {${blockBody}}\n`;
+                } else {
+                    // Case B: Grouping Rules (@media, @supports, @layer, @container)
+                    const processedBody = processBlock(blockBody, rootSelector);
+                    result += `${headerRaw} {\n${processedBody}\n}\n`;
+                }
             } else {
-                // Case B: Standard Selectors
+                // Case C: Standard Selectors
                 const newSelector = rewriteSelector(headerRaw, rootSelector);
                 if (newSelector) {
                     result += `${newSelector} {${blockBody}}\n`;
@@ -144,8 +149,8 @@
             const s = part.trim();
 
             // 1. Explicit :scope pseudo-class
-            if (s.includes(':scope')) {
-                return s.replace(/:scope/g, rootSelector);
+            if (s.includes(':scope') || s.includes(': scope')) {
+                return s.replace(/:\s*scope/g, rootSelector);
             }
 
             // 2. Nesting selector &
