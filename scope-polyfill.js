@@ -5,63 +5,114 @@
  * Supports nesting and recursive rule processing.
  * 
  * @author oy3o & Moonlight
- * @version 1.0.0
+ * @version 1.1.0
  */
 (async function ScopePolyfill() {
     const TAG = '[@scope]';
+    const processedNodes = new WeakSet(); // Memory-safe deduping
 
     // 1. Feature Detection
-    // If the browser natively supports it, we yield immediately.
     try {
         if (typeof CSSScopeRule !== "undefined") {
             console.log(`${TAG} Native support detected. Hibernating.`);
             return;
         }
-    } catch (e) {
-        // Fallback for browsers that throw on unknown selectors
-    }
+    } catch (e) { }
 
-    console.log(`${TAG} Activating polyfill...`);
+    console.log(`${TAG} Activating polyfill (Live Mode)...`);
 
     /**
-     * Main execution loop: Fetches and transforms CSS resources.
+     * Core Logic: Process a specific DOM node (Link or Style)
+     * @param {Element} node
      */
-    async function init() {
-        // Filter relevant stylesheets (.css files)
-        const resources = performance.getEntriesByType('resource').filter(r => r.name.endsWith('.css'));
+    async function processNode(node) {
+        // Circuit Breaker: Skip if already processed
+        if (processedNodes.has(node)) return;
+        processedNodes.add(node);
 
-        for (const resource of resources) {
-            try {
-                const response = await fetch(resource.name);
-                if (!response.ok) continue;
+        // Guard: Skip our own injected polyfill styles to prevent infinite loops
+        if (node.hasAttribute('data-polyfill-generated')) return;
 
-                const cssText = await response.text();
+        let cssText = '';
+        let sourceUrl = 'inline-style';
 
-                // Fast fail: skip if no @scope is present
-                if (!cssText.includes('@scope')) continue;
+        try {
+            if (node.tagName === 'LINK') {
+                const link = /** @type {HTMLLinkElement} */(node);
+                if (link.rel !== 'stylesheet' || !link.href) return;
+                // Fetch external CSS
+                sourceUrl = link.href;
+                const response = await fetch(sourceUrl);
+                if (!response.ok) return;
+                cssText = await response.text();
 
-                const transformedCss = parseAndTransform(cssText);
-                if (transformedCss) {
-                    injectStyles(transformedCss, resource.name);
-                    console.log(`${TAG} Processed ${resource.name}`);
-                }
-            } catch (e) {
-                console.warn(`${TAG} Failed to process ${resource.name}`, e);
+            } else if (node.tagName === 'STYLE') {
+                // Read inline CSS
+                cssText = node.textContent;
+            } else {
+                return;
             }
+
+            // Fast fail: Optimization
+            if (!cssText.includes('@scope')) return;
+
+            const transformedCss = parseAndTransform(cssText);
+            if (transformedCss) {
+                injectStyles(transformedCss, sourceUrl);
+                console.log(`${TAG} Processed ${sourceUrl}`);
+            }
+
+        } catch (e) {
+            console.warn(`${TAG} Failed to process ${sourceUrl}`, e);
         }
     }
 
     /**
-     * Extracts @scope blocks and transforms them into scoped selectors.
-     * @param {string} cssText - The CSS text to process.
-     * @returns {string|null} The transformed CSS text, or null if no @scope is found.
+     * Observer: Watches for new nodes entering the DOM
+     */
+    function observeMutations() {
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === 1) { // ELEMENT_NODE
+                            const el = /** @type {Element} */(node);
+                            // Handle cases where styles are nested inside a container being added
+                            if (isStyleNode(el)) processNode(el);
+                            else el.querySelectorAll?.('link[rel="stylesheet"], style').forEach(processNode);
+                        }
+                    });
+                }
+            }
+        });
+
+        // Watch the entire document body and head
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    /**
+     * Helper: Identifies if a node is a target for processing
+     * @param {Element} node
+     * @returns {boolean}
+     */
+    function isStyleNode(node) {
+        // @ts-ignore
+        return (node.tagName === 'LINK' && node.rel === 'stylesheet') || node.tagName === 'STYLE';
+    }
+
+    // --- [Logic Kernel: Unchanged Transformation Logic] ---
+
+    /**
+     * Parse and transform CSS text
+     * @param {string} cssText
+     * @returns {string | null}
      */
     function parseAndTransform(cssText) {
-        // Remove comments to prevent false positives
         const cleanCss = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
-
-        // Regex to find the opening of @scope (e.g., "@scope (.card) {")
-        // Note: This matches the "root" scope. Complex "to" syntax is not fully supported in this MVP.
+        // Regex adjusted to be slightly more robust
         const scopeHeadRegex = /@scope\s*\(([^)]+)\)\s*{/g;
 
         let match;
@@ -74,20 +125,18 @@
 
             if (bodyEnd !== -1) {
                 const innerContent = cleanCss.substring(bodyStart, bodyEnd);
-                // Recursively process the rules inside the scope
                 const transformedBlock = processBlock(innerContent, scopeRootSelector);
                 extractedRules.push(transformedBlock);
             }
         }
-
         return extractedRules.length > 0 ? extractedRules.join('\n') : null;
     }
 
     /**
-     * Recursively processes CSS blocks to handle nesting (like @media inside @scope).
-     * @param {string} cssText - The CSS text to process.
-     * @param {string} rootSelector - The root selector for the scope.
-     * @returns {string} The processed CSS text.
+     * Process a block of CSS text
+     * @param {string} cssText
+     * @param {string} rootSelector
+     * @returns {string}
      */
     function processBlock(cssText, rootSelector) {
         let result = '';
@@ -97,59 +146,47 @@
             const openBrace = cssText.indexOf('{', cursor);
             if (openBrace === -1) break;
 
-            // 1. Get Header (Selector or At-Rule)
             const headerRaw = cssText.substring(cursor, openBrace).trim();
-
-            // 2. Find matching closing brace
             const closeBrace = findClosingBrace(cssText, openBrace);
-            if (closeBrace === -1) {
-                console.warn(`${TAG} Unbalanced brace detected.`);
-                break;
-            }
+            if (closeBrace === -1) break;
 
-            // 3. Extract Body
             const blockBody = cssText.substring(openBrace + 1, closeBrace);
 
-            // 4. Transform Logic
             if (headerRaw.startsWith('@')) {
                 const isDefinitionRule = /^@(keyframes|font-face)/i.test(headerRaw);
                 if (isDefinitionRule) {
-                    // Case A: Definition Rules (@keyframes, @font-face)
                     result += `${headerRaw} {${blockBody}}\n`;
                 } else {
-                    // Case B: Grouping Rules (@media, @supports, @layer, @container)
                     const processedBody = processBlock(blockBody, rootSelector);
                     result += `${headerRaw} {\n${processedBody}\n}\n`;
                 }
             } else {
-                // Case C: Standard Selectors
                 const newSelector = rewriteSelector(headerRaw, rootSelector);
                 if (newSelector) {
                     result += `${newSelector} {${blockBody}}\n`;
                 }
             }
-
             cursor = closeBrace + 1;
         }
-
         return result;
     }
 
     /**
-     * Rewrites a selector string to simulate scoping.
-     * Handles: :scope, & (nesting), and descendant combinators.
-     * @param {string} selectorLine - The selector line to rewrite.
-     * @param {string} rootSelector - The root selector for the scope.
-     * @returns {string} The rewritten selector line.
+     * Rewrite a selector to use the root selector
+     * @param {string} selectorLine
+     * @param {string} rootSelector
+     * @returns {string}
      */
     function rewriteSelector(selectorLine, rootSelector) {
         if (!selectorLine.trim()) return '';
 
-        return selectorLine.split(',').map(part => {
+        const parts = splitByCommaBalanced(selectorLine);
+
+        return parts.map(part => {
             const s = part.trim();
 
             // 1. Explicit :scope pseudo-class
-            if (s.includes(':scope') || s.includes(': scope')) {
+            if (s.includes(':scope')) {
                 return s.replace(/:\s*scope/g, rootSelector);
             }
 
@@ -158,16 +195,60 @@
                 return s.replace(/&/g, rootSelector);
             }
 
-            // 3. Implicit descendant
+            // 3. Implicit descendant (Standard Scoping)
             return `${rootSelector} ${s}`;
         }).join(', ');
     }
+    /**
+     * Helper: Splits a CSS selector list by comma, ignoring commas inside parentheses.
+     * Handles: :is(.a, .b), :not(.a, .b), [attr="a,b"]
+     * @param {string} text
+     * @returns {string[]}
+     */
+    function splitByCommaBalanced(text) {
+        const parts = [];
+        let buffer = '';
+        let depth = 0;
+        let inString = false;
+        let stringChar = '';
+
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+
+            // Handle Strings (to ignore commas inside quotes like [data-val="a,b"])
+            if ((char === '"' || char === "'") && text[i - 1] !== '\\') {
+                if (inString && char === stringChar) {
+                    inString = false;
+                } else if (!inString) {
+                    inString = true;
+                    stringChar = char;
+                }
+            }
+
+            // Handle Parentheses (only if not in string)
+            if (!inString) {
+                if (char === '(') depth++;
+                else if (char === ')') depth--;
+            }
+
+            // Split logic
+            if (char === ',' && depth === 0 && !inString) {
+                parts.push(buffer);
+                buffer = '';
+            } else {
+                buffer += char;
+            }
+        }
+
+        if (buffer) parts.push(buffer);
+        return parts;
+    }
 
     /**
-     * Helper: Finds the matching closing brace index relying on depth counting.
-     * @param {string} text - The text to search.
-     * @param {number} openBraceIndex - The index of the opening brace.
-     * @returns {number} The index of the matching closing brace, or -1 if not found.
+     * Find the closing brace for a given open brace index
+     * @param {string} text
+     * @param {number} openBraceIndex
+     * @returns {number}
      */
     function findClosingBrace(text, openBraceIndex) {
         let depth = 1;
@@ -175,16 +256,15 @@
             const char = text[i];
             if (char === '{') depth++;
             else if (char === '}') depth--;
-
             if (depth === 0) return i;
         }
         return -1;
     }
 
     /**
-     * Injects the transformed CSS as a blob URL.
-     * @param {string} cssText - The CSS text to inject.
-     * @param {string} source - The source of the CSS text.
+     * Inject styles into the document
+     * @param {string} cssText
+     * @param {string} source
      */
     function injectStyles(cssText, source) {
         const blob = new Blob([cssText], { type: 'text/css' });
@@ -192,11 +272,17 @@
         const link = document.createElement('link');
         link.rel = 'stylesheet';
         link.href = url;
-        link.setAttribute('data-polyfill-source', source);
+        // Important: Mark this node so the observer ignores it!
+        link.setAttribute('data-polyfill-generated', 'true');
+        link.setAttribute('data-source', source);
         document.head.appendChild(link);
     }
 
-    // Ignite
-    await init();
-})()
+    // --- [Ignition] ---
 
+    // @ts-ignore 1. Scan currently existing nodes 
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach(processNode);
+
+    // 2. Start watching for future nodes
+    observeMutations();
+})()
