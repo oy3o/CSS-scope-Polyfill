@@ -7,13 +7,13 @@
 [![license](https://img.shields.io/npm/l/@oy3o/css-scope-polyfill?style=flat-square)](LICENSE)
 [![size](https://img.shields.io/bundlephobia/minzip/@oy3o/css-scope-polyfill?style=flat-square)](https://bundlephobia.com/package/@oy3o/css-scope-polyfill)
 
-## 🌟 Why this?
+## Why this?
 
 The [CSS `@scope` rule](https://developer.mozilla.org/en-US/docs/Web/CSS/@scope) is a game-changer for component architecture, allowing you to select elements specifically within a DOM subtree. However, browser support is still catching up.
 
 This polyfill bridges the gap. It observes your DOM, parses your CSS, and applies the scoping logic dynamically—preserving your ability to write modern, clean CSS today.
 
-## ✨ Features
+## Features
 
 -   **Native Syntax Support**: Writes exactly like native CSS. No custom classes required.
 -   **Live DOM Monitoring**: Automatically detects new `<style>` tags or lazy-loaded components via `MutationObserver`.
@@ -27,7 +27,7 @@ This polyfill bridges the gap. It observes your DOM, parses your CSS, and applie
 
 ---
 
-## 📦 Installation
+## Installation
 
 ```bash
 npm install @oy3o/css-scope-polyfill
@@ -36,7 +36,7 @@ Or use your favorite package manager (pnpm, yarn).
 
 ---
 
-## 🚀 Usage
+## Usage
 
 ### 1. The "Drop-in" Mode (CDN)
 *Best for static sites or quick prototypes.*
@@ -79,25 +79,19 @@ If your framework already has an event system (like a global EventBus or a virtu
 
 ```javascript
 import ScopePolyfill from '@oy3o/css-scope-polyfill';
-import { myGlobalEvents } from './my-framework';
+import { events } from './my-framework';
 
-ScopePolyfill({
-  // Strategy: Delegate DOM observation to your framework
-  watcher: (processCallback) => {
-    // 1. Process existing styles
-    myGlobalEvents.scanStyles((node) => processCallback(node));
+/**
+ * @typedef {object} EventSystem
+ * @property {(callback: (mutations: {added: Set<Element>, removed: Set<Element>}) => void) => void} onMutation
+ */
 
-    // 2. Listen for future styles
-    myGlobalEvents.on('style-injected', (node) => {
-      processCallback(node);
-    });
-  }
-});
+ScopePolyfill(events);
 ```
 
 ---
 
-## 🎨 Supported Syntax
+## Supported Syntax
 
 ### Basic Scoping
 ```css
@@ -135,7 +129,7 @@ ScopePolyfill({
 
 ---
 
-## ⚠️ Limitations & Trade-offs (Red Team Analysis)
+## Limitations & Trade-offs (Red Team Analysis)
 
 1.  **CORS (Cross-Origin Resource Sharing)**:
     Since the polyfill must fetch external CSS files to parse them, `<link href="...">` pointing to a different domain must serve correct CORS headers (`Access-Control-Allow-Origin: *`).
@@ -147,6 +141,6 @@ ScopePolyfill({
 
 ---
 
-## 📄 License
+## License
 
 MIT © [oy3o](https://github.com/oy3o)

@@ -7,6 +7,14 @@
  * @author oy3o & Moonlight
  */
 
+/**
+ * @typedef {object} EventSystem
+ * @property {(callback: (mutations: {added: Set<Element>, removed: Set<Element>}) => void) => void} onMutation
+ */
+
+/**
+ * @param {EventSystem} [events]
+ */
 function CSSScopePolyfill(events) {
     const TAG = '[@scope]';
     const processedNodes = new WeakSet(); // Memory-safe deduping
@@ -116,8 +124,6 @@ function CSSScopePolyfill(events) {
         return (node.tagName === 'LINK' && node.rel === 'stylesheet') || node.tagName === 'STYLE';
     }
 
-    // --- [Logic Kernel: Unchanged Transformation Logic] ---
-
     /**
      * Parse and transform CSS text
      * @param {string} cssText
@@ -212,6 +218,7 @@ function CSSScopePolyfill(events) {
             return `${rootSelector} ${s}`;
         }).join(', ');
     }
+
     /**
      * Helper: Splits a CSS selector list by comma, ignoring commas inside parentheses.
      * Handles: :is(.a, .b), :not(.a, .b), [attr="a,b"]
@@ -298,10 +305,6 @@ function CSSScopePolyfill(events) {
 
     // 2. Start watching for future nodes
     observeMutations();
-}
-
-if (typeof window !== 'undefined') {
-    window.CSSScopePolyfill = CSSScopePolyfill;
 }
 
 export default CSSScopePolyfill;
