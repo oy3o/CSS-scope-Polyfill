@@ -1,0 +1,57 @@
+{
+    "name": "@oy3o/css-scope-polyfill",
+    "version": "1.2.0",
+    "description": "A lightweight, zero-dependency polyfill for the CSS @scope at-rule with MutationObserver support.",
+    "type": "module",
+    "author": "oy3o",
+    "license": "MIT",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "unpkg": "./dist/browser.global.js",
+    "jsdelivr": "./dist/browser.global.js",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        },
+        "./global": {
+            "default": "./dist/browser.global.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "sideEffects": false,
+    "files": [
+        "dist",
+        "src",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "dev": "tsup --watch",
+        "build": "tsup",
+        "prepublishOnly": "npm run build",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "css",
+        "scope",
+        "polyfill",
+        "css-scope",
+        "web-components",
+        "scoping",
+        "mutation-observer"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/oy3o/css-scope-polyfill.git"
+    },
+    "bugs": {
+        "url": "https://github.com/oy3o/css-scope-polyfill/issues"
+    },
+    "homepage": "https://github.com/oy3o/css-scope-polyfill#readme",
+    "devDependencies": {
+        "tsup": "^8.0.0"
+    }
+}

@@ -1,80 +1,152 @@
-# CSS `@scope` Polyfill
+# CSS @scope Polyfill
 
-> **Experimental Runtime Polyfill**  
-> Bringing encapsulated styles to browsers that don't yet speak the language of modern CSS.
+> **Bring the future of CSS encapsulation to today's browsers.**  
+> A lightweight, zero-dependency runtime polyfill for the CSS `@scope` at-rule.
 
-This lightweight script detects generic `@scope` rules in your external stylesheets and transforms them into scoped selectors at runtime. It essentially "flattens" the scoping logic into standard CSS descendant selectors.
+[![npm version](https://img.shields.io/npm/v/@oy3o/css-scope-polyfill?style=flat-square)](https://www.npmjs.com/package/@oy3o/css-scope-polyfill)
+[![license](https://img.shields.io/npm/l/@oy3o/css-scope-polyfill?style=flat-square)](LICENSE)
+[![size](https://img.shields.io/bundlephobia/minzip/@oy3o/css-scope-polyfill?style=flat-square)](https://bundlephobia.com/package/@oy3o/css-scope-polyfill)
 
-## Features
+## 🌟 Why this?
 
-- **Zero Config**: Just include the script. It auto-detects support.
-- **Native Fallback**: If the browser supports `@scope` natively, this script does nothing.
-- **Recursive Parsing**: Correctly handles nested At-Rules (like `@media` or `@supports`) inside a `@scope` block.
-- **Pseudo-class Support**:
-  - Replaces `:scope` with the root selector.
-  - Replaces `&` with the root selector.
-  - Handles implicit descendant selectors.
+The [CSS `@scope` rule](https://developer.mozilla.org/en-US/docs/Web/CSS/@scope) is a game-changer for component architecture, allowing you to select elements specifically within a DOM subtree. However, browser support is still catching up.
 
-## Usage
+This polyfill bridges the gap. It observes your DOM, parses your CSS, and applies the scoping logic dynamically—preserving your ability to write modern, clean CSS today.
 
-Simply add the script to your HTML document **after** your stylesheets.
+## ✨ Features
 
-```html
-<!-- Your CSS -->
-<link rel="stylesheet" href="styles.css">
-
-<!-- The Polyfill -->
-<script src="path/to/scope-polyfill.js"></script>
-```
-
-### Example
-
-**Input CSS (`styles.css`):**
-```css
-@scope (.card) {
-  /* Implicit descendant */
-  img { 
-    border-radius: 50%; 
-  }
-
-  /* Explicit scope usage */
-  :scope {
-    background: #fff;
-  }
-  
-  /* Nested Rule Support */
-  @media (max-width: 500px) {
-    h2 { font-size: 1rem; }
-  }
-}
-```
-
-**Transformed Output (Injected at runtime):**
-```css
-.card img { 
-  border-radius: 50%; 
-}
-.card {
-  background: #fff;
-}
-@media (max-width: 500px) {
-  .card h2 { font-size: 1rem; }
-}
-```
-
-## Limitations & Caveats
-
-1.  **CORS**: Since this script uses `fetch()` to read your CSS files, your stylesheets must be served with appropriate CORS headers if they are on a different domain (CDN).
-2.  **Performance**: This is a runtime transformation. For large production apps, it is **strongly recommended** to use a build-time tool (like PostCSS) instead of this polyfill.
-3.  **Syntax Support**: 
-    - Currently supports `@scope (root)`.
-    - Does **not** yet fully support the "donut scope" syntax: `@scope (root) to (limit)`.
-
-## Architecture
-
-- **Recursive Descent**: Uses a depth-counter mechanism to parse nested `{}` blocks, ensuring rules inside `@media` queries within a scope are preserved and transformed correctly.
-- **Isolation**: Injected styles use `Blob` URLs to avoid modifying the DOM's original `<link>` tags directly, keeping the source clean.
+-   **Native Syntax Support**: Writes exactly like native CSS. No custom classes required.
+-   **Live DOM Monitoring**: Automatically detects new `<style>` tags or lazy-loaded components via `MutationObserver`.
+-   **Intelligent Scoping**:
+    -   Supports `:scope` pseudo-class.
+    -   Supports `&` nesting selectors.
+    -   Handles complex selectors like `:is()`, `:where()`, and `:not()` correctly.
+-   **Dual-Mode Architecture**:
+    -   **Zero-Config**: Drop it in via CDN, and it just works.
+    -   **Framework-Ready**: Pure ESM export with Dependency Injection support for advanced integration.
 
 ---
-*Maintained by oy3o & Moonlight.*
 
+## 📦 Installation
+
+```bash
+npm install @oy3o/css-scope-polyfill
+```
+Or use your favorite package manager (pnpm, yarn).
+
+---
+
+## 🚀 Usage
+
+### 1. The "Drop-in" Mode (CDN)
+*Best for static sites or quick prototypes.*
+
+Simply add the script to your `<head>`. It will automatically scan for `@scope` rules and watch for changes.
+
+```html
+<!-- Via unpkg -->
+<script src="https://unpkg.com/@oy3o/css-scope-polyfill"></script>
+
+<!-- OR via jsdelivr -->
+<script src="https://cdn.jsdelivr.net/npm/@oy3o/css-scope-polyfill"></script>
+```
+
+#### Manual Control (Optional)
+If you want to load the script but prevent it from running automatically (e.g., to configure it later), add the `data-manual` attribute:
+
+```html
+<script src="..." data-manual></script>
+<script>
+  // Start it manually when you are ready
+  window.CSSScopePolyfill();
+</script>
+```
+
+### 2. The "Architect" Mode (ESM / Frameworks)
+*Best for React, Vue, Vite, Webpack, or internal frameworks.*
+
+Import the pure logic. It does **not** start automatically, giving you full control over the lifecycle.
+
+```javascript
+import ScopePolyfill from '@oy3o/css-scope-polyfill';
+
+// Basic usage: Start with default MutationObserver
+ScopePolyfill();
+```
+
+#### Advanced: Dependency Injection (BYO Observer)
+If your framework already has an event system (like a global EventBus or a virtual DOM patcher), you can inject a custom `watcher` to avoid running a duplicate `MutationObserver`.
+
+```javascript
+import ScopePolyfill from '@oy3o/css-scope-polyfill';
+import { myGlobalEvents } from './my-framework';
+
+ScopePolyfill({
+  // Strategy: Delegate DOM observation to your framework
+  watcher: (processCallback) => {
+    // 1. Process existing styles
+    myGlobalEvents.scanStyles((node) => processCallback(node));
+
+    // 2. Listen for future styles
+    myGlobalEvents.on('style-injected', (node) => {
+      processCallback(node);
+    });
+  }
+});
+```
+
+---
+
+## 🎨 Supported Syntax
+
+### Basic Scoping
+```css
+/* Input */
+@scope (.card) {
+    :scope {
+        border: 1px solid red; /* Applies to .card itself */
+    }
+    
+    img {
+        border-radius: 50%; /* Only applies to img INSIDE .card */
+    }
+}
+```
+
+### Nesting & Pseudo-classes
+```css
+/* Input */
+@scope (.sidebar) {
+    .tab {
+        background: #ccc;
+        
+        /* Nesting support */
+        &:hover {
+            background: #fff;
+        }
+    }
+    
+    /* Complex selectors work too */
+    :scope > .content :is(h1, h2) {
+        color: blue;
+    }
+}
+```
+
+---
+
+## ⚠️ Limitations & Trade-offs (Red Team Analysis)
+
+1.  **CORS (Cross-Origin Resource Sharing)**:
+    Since the polyfill must fetch external CSS files to parse them, `<link href="...">` pointing to a different domain must serve correct CORS headers (`Access-Control-Allow-Origin: *`).
+2.  **Flash of Unstyled Content (FOUC)**:
+    As a runtime polyfill, there is a slight delay between the CSS loading and the polyfill rewriting the rules. For critical path CSS, consider server-side transformation if possible.
+3.  **Specific Syntax**:
+    Currently supports the "Root Scoping" syntax (`@scope (.root) { ... }`).
+    *Support for the "Donut Scoping" (lower boundary `to (...)`) is experimental.*
+
+---
+
+## 📄 License
+
+MIT © [oy3o](https://github.com/oy3o)

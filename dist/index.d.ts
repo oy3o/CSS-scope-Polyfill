@@ -1,13 +1,16 @@
 /**
- * CSS @scope Polyfill
+ * CSS @scope Polyfill v1.1.1 (Live-Watch Edition)
  * 
  * A lightweight runtime polyfill for the CSS @scope at-rule.
- * Supports nesting and recursive rule processing.
+ * Now features MutationObserver to handle lazy-loaded and dynamic styles.
  * 
  * @author oy3o & Moonlight
- * @version 1.1.0
  */
-(async function ScopePolyfill() {
+
+/**
+ * @param {import("./events").default} [events]
+ */
+function CSSScopePolyfill(events) {
     const TAG = '[@scope]';
     const processedNodes = new WeakSet(); // Memory-safe deduping
 
@@ -71,26 +74,39 @@
      * Observer: Watches for new nodes entering the DOM
      */
     function observeMutations() {
-        const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (mutation.type === 'childList') {
-                    mutation.addedNodes.forEach(node => {
-                        if (node.nodeType === 1) { // ELEMENT_NODE
-                            const el = /** @type {Element} */(node);
-                            // Handle cases where styles are nested inside a container being added
-                            if (isStyleNode(el)) processNode(el);
-                            else el.querySelectorAll?.('link[rel="stylesheet"], style').forEach(processNode);
-                        }
-                    });
+        if (events) {
+            events.onMutation((mutations) => {
+                for (const node of mutations.added) {
+                    if (node.nodeType === 1) { // ELEMENT_NODE
+                        const el = /** @type {Element} */(node);
+                        // Handle cases where styles are nested inside a container being added
+                        if (isStyleNode(el)) processNode(el);
+                        else el.querySelectorAll?.('link[rel="stylesheet"], style').forEach(processNode);
+                    }
                 }
-            }
-        });
+            });
+        } else {
+            const observer = new MutationObserver((mutations) => {
+                for (const mutation of mutations) {
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach(node => {
+                            if (node.nodeType === 1) { // ELEMENT_NODE
+                                const el = /** @type {Element} */(node);
+                                // Handle cases where styles are nested inside a container being added
+                                if (isStyleNode(el)) processNode(el);
+                                else el.querySelectorAll?.('link[rel="stylesheet"], style').forEach(processNode);
+                            }
+                        });
+                    }
+                }
+            });
 
-        // Watch the entire document body and head
-        observer.observe(document.documentElement, {
-            childList: true,
-            subtree: true
-        });
+            // Watch the entire document body and head
+            observer.observe(document.documentElement, {
+                childList: true,
+                subtree: true
+            });
+        }
     }
 
     /**
@@ -285,4 +301,10 @@
 
     // 2. Start watching for future nodes
     observeMutations();
-})()
+}
+
+if (typeof window !== 'undefined') {
+    window.CSSScopePolyfill = CSSScopePolyfill;
+}
+
+export { CSSScopePolyfill as default };
