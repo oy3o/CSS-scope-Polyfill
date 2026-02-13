@@ -69,7 +69,6 @@ Simply add the script to your HTML document **after** your stylesheets.
 3.  **Syntax Support**: 
     - Currently supports `@scope (root)`.
     - Does **not** yet fully support the "donut scope" syntax: `@scope (root) to (limit)`.
-4.  **Inline Styles**: Currently only scans `<link rel="stylesheet">` resources, ignoring `<style>` tags.
 
 ## Architecture
 
